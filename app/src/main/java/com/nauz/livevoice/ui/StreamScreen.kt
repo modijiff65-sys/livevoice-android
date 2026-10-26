@@ -47,6 +47,8 @@ fun StreamScreen(
   level: Float,
   preset: VoicePreset,
   permissionsGranted: Boolean,
+  screenMode: Boolean,
+  onToggleScreenMode: (Boolean) -> Unit,
   muted: Boolean,
   flashOn: Boolean,
   onPreview: (SurfaceView) -> Unit,
@@ -64,13 +66,44 @@ fun StreamScreen(
 
   Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
-    if (permissionsGranted) {
+    if (screenMode) {
+      Box(
+        modifier = Modifier.fillMaxSize().background(Palette.Background),
+        contentAlignment = Alignment.Center
+      ) {
+        Column(
+          modifier = Modifier.padding(32.dp),
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          Text(
+            text = "Screen sharing",
+            color = Palette.TextPrimary,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+          )
+          Spacer(Modifier.height(10.dp))
+          Text(
+            text = "Tap Go Live and the system will ask what to share: your entire screen, or on Android 14 and newer a single app. Your voice effect still applies to the mic.",
+            color = Palette.TextSecondary,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+          )
+          Spacer(Modifier.height(10.dp))
+          Text(
+            text = "Screen sharing needs Android 5.0 or newer. Everything you show, including notifications, goes to the stream.",
+            color = Palette.TextSecondary.copy(alpha = 0.8f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center
+          )
+        }
+      }
+    } else if (permissionsGranted) {
       var previewView by remember { mutableStateOf<OpenGlView?>(null) }
       AndroidView(
         factory = { context -> OpenGlView(context).also { previewView = it } },
         modifier = Modifier.fillMaxSize()
       )
-      LaunchedEffect(previewView, settings.quality, settings.portrait) {
+      LaunchedEffect(previewView, settings.quality, settings.portrait, screenMode) {
         previewView?.let { onPreview(it) }
       }
     } else {
@@ -152,6 +185,19 @@ fun StreamScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)
       ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          SectionTitle(text = "Source")
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EffectChip(
+              label = "Camera",
+              selected = !screenMode,
+              onClick = { onToggleScreenMode(false) }
+            )
+            EffectChip(
+              label = "Screen",
+              selected = screenMode,
+              onClick = { onToggleScreenMode(true) }
+            )
+          }
           SectionTitle(text = "Voice effect")
           LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(VoicePreset.ALL) { item ->
@@ -173,12 +219,14 @@ fun StreamScreen(
           active = muted,
           accent = Palette.LiveRed
         )
-        PillButton(text = "Flip", onClick = onSwitchCamera)
-        PillButton(
-          text = if (flashOn) "Light off" else "Light",
-          onClick = onToggleFlash,
-          active = flashOn
-        )
+        if (!screenMode) {
+          PillButton(text = "Flip", onClick = onSwitchCamera)
+          PillButton(
+            text = if (flashOn) "Light off" else "Light",
+            onClick = onToggleFlash,
+            active = flashOn
+          )
+        }
         if (isLive) {
           PillButton(text = "Chat", onClick = onOpenChat)
         }
@@ -188,7 +236,11 @@ fun StreamScreen(
         GradientButton(text = "STOP STREAM", onClick = onStop)
       } else {
         GradientButton(
-          text = if (state.status == StreamController.Status.CONNECTING) "CONNECTING..." else "GO LIVE",
+          text = when {
+            state.status == StreamController.Status.CONNECTING -> "CONNECTING..."
+            screenMode -> "SHARE SCREEN & GO LIVE"
+            else -> "GO LIVE"
+          },
           onClick = onGoLive,
           enabled = state.status != StreamController.Status.CONNECTING && permissionsGranted
         )

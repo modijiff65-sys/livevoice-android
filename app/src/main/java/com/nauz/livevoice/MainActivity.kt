@@ -1,7 +1,11 @@
 package com.nauz.livevoice
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
+import android.media.projection.MediaProjectionManager
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -81,6 +85,19 @@ private fun AppRoot(container: AppContainer) {
     permissionsGranted = hasStreamPermissions(context)
   }
 
+  val projectionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.StartActivityForResult()
+  ) { result ->
+    val data = result.data
+    if (result.resultCode == Activity.RESULT_OK && data != null) {
+      // The mediaProjection foreground service must be running before the projection is created.
+      LiveService.start(context, true)
+      viewModel.goLiveScreen(result.resultCode, data)
+    } else {
+      viewModel.showMessage("Screen sharing permission was cancelled")
+    }
+  }
+
   LaunchedEffect(Unit) {
     if (!permissionsGranted) permissionLauncher.launch(requiredPermissions())
   }
@@ -118,6 +135,14 @@ private fun AppRoot(container: AppContainer) {
         level = level,
         preset = preset,
         permissionsGranted = permissionsGranted,
+        screenMode = settings.screenMode,
+        onToggleScreenMode = { enabled ->
+          if (isLive) {
+            viewModel.showMessage("Stop the stream before switching source")
+          } else {
+            viewModel.setScreenMode(enabled)
+          }
+        },
         muted = muted,
         flashOn = flashOn,
         onPreview = { view -> viewModel.attachPreview(view, settings.quality, settings.portrait) },
@@ -128,8 +153,15 @@ private fun AppRoot(container: AppContainer) {
           } else if (key.isBlank()) {
             tab = 2
             viewModel.showMessage("Add your YouTube stream key first")
+          } else if (settings.screenMode) {
+            val intent = screenCaptureIntent(context)
+            if (intent == null) {
+              viewModel.showMessage("Screen capture is not available on this device")
+            } else {
+              projectionLauncher.launch(intent)
+            }
           } else {
-            LiveService.start(context)
+            LiveService.start(context, false)
             viewModel.goLive()
           }
         },
@@ -230,6 +262,16 @@ private fun AppRoot(container: AppContainer) {
     }
   }
 }
+
+private fun screenCaptureIntent(context: Context): Intent? = runCatching {
+  val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+    // Android 14+ lets the user pick the whole screen or a single app.
+    manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForUserChoice())
+  } else {
+    manager.createScreenCaptureIntent()
+  }
+}.getOrNull()
 
 private fun requiredPermissions(): Array<String> {
   val permissions = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)

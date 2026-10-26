@@ -28,8 +28,6 @@ class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource() 
   @Volatile
   private var running = false
 
-  @Volatile
-  private var muted = false
 
   /** RootEncoder only asks for validity here; the real AudioRecord is opened in [start]. */
   override fun create(sampleRate: Int, isStereo: Boolean, echoCanceler: Boolean, noiseSuppressor: Boolean) = true
@@ -47,7 +45,9 @@ class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource() 
     if (minBuffer <= 0) throw IllegalArgumentException("Unsupported audio config: $sampleRate Hz")
 
     val rec = AudioRecord(
-      MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+      // MIC, not VOICE_COMMUNICATION: the call audio path is narrow band and applies aggressive
+      // AGC/noise suppression, which is exactly what makes a voice sound muffled and buzzy.
+      MediaRecorder.AudioSource.MIC,
       sampleRate,
       channelMask,
       AudioFormat.ENCODING_PCM_16BIT,
@@ -73,18 +73,15 @@ class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource() 
   }
 
   private fun readLoop(rec: AudioRecord) {
-    val pcm = ByteArray(2048)
+    val pcm = ByteArray(4096)
     while (running) {
       val size = rec.read(pcm, 0, pcm.size)
       if (size <= 0) {
         if (size < 0) break else continue
       }
       val timeStamp = System.nanoTime() / 1000
-      if (muted) {
-        java.util.Arrays.fill(pcm, 0, size, 0)
-      } else {
-        processor.process(pcm, size)
-      }
+      // VoiceProcessor applies the effect and handles mute itself.
+      processor.process(pcm, size)
       getMicrophoneData?.inputPCMData(Frame(pcm, 0, size, timeStamp))
     }
   }
@@ -108,6 +105,6 @@ class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource() 
   override fun release() = stop()
 
   fun setMuted(value: Boolean) {
-    muted = value
+    processor.muted = value
   }
 }

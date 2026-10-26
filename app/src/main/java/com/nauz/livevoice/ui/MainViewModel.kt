@@ -1,5 +1,6 @@
 package com.nauz.livevoice.ui
 
+import android.content.Intent
 import android.view.SurfaceView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -67,6 +68,20 @@ class MainViewModel(
       return
     }
     stream.goLive(current.rtmpUrl, key)
+  }
+
+  fun goLiveScreen(resultCode: Int, data: Intent) {
+    val current = settings.value
+    val key = _streamKey.value
+    if (key.isBlank()) {
+      _message.value = "Add your YouTube stream key in Settings first"
+      return
+    }
+    stream.startScreenStream(resultCode, data, current.quality, current.rtmpUrl, key)
+  }
+
+  fun setScreenMode(enabled: Boolean) {
+    viewModelScope.launch { repo.setScreenMode(enabled) }
   }
 
   fun stopLive() {

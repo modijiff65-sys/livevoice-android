@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -15,9 +16,10 @@ import com.nauz.livevoice.MainActivity
 import com.nauz.livevoice.R
 
 /**
- * Foreground service with the camera + microphone types. It exists so Android keeps the process
- * (and therefore the RTMP encoder) alive while the user is in another app, and so the notification
- * offers a one tap stop.
+ * Foreground service for a live session. The type mask is chosen per session: a camera stream
+ * declares camera + microphone, a screen stream declares microphone + mediaProjection (Android 14
+ * rejects a mediaProjection service if the user has not granted capture yet, so the two are kept
+ * apart on purpose). The notification offers a one tap stop.
  */
 class LiveService : Service() {
 
@@ -29,8 +31,21 @@ class LiveService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
+    val screen = intent?.getBooleanExtra(EXTRA_SCREEN, false) ?: false
     createChannel()
-    startForeground(NOTIFICATION_ID, buildNotification())
+    val notification = buildNotification(screen)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val type = if (screen) {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+      } else {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+      }
+      startForeground(NOTIFICATION_ID, notification, type)
+    } else {
+      startForeground(NOTIFICATION_ID, notification)
+    }
     return START_STICKY
   }
 
@@ -39,7 +54,7 @@ class LiveService : Service() {
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
-  private fun buildNotification(): Notification {
+  private fun buildNotification(screen: Boolean): Notification {
     val openApp = PendingIntent.getActivity(
       this,
       0,
@@ -52,9 +67,14 @@ class LiveService : Service() {
       Intent(this, LiveService::class.java).setAction(ACTION_STOP),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+    val text = if (screen) {
+      "Sharing your screen to YouTube with your voice effect"
+    } else {
+      "Streaming to YouTube with your voice effect"
+    }
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle("LiveVoice is live")
-      .setContentText("Streaming to YouTube with your voice effect")
+      .setContentText(text)
       .setSmallIcon(R.drawable.ic_notification)
       .setOngoing(true)
       .setContentIntent(openApp)
@@ -79,9 +99,10 @@ class LiveService : Service() {
     private const val CHANNEL_ID = "live_voice_stream"
     private const val NOTIFICATION_ID = 42
     private const val ACTION_STOP = "com.nauz.livevoice.STOP_STREAM"
+    private const val EXTRA_SCREEN = "screen_mode"
 
-    fun start(context: Context) {
-      val intent = Intent(context, LiveService::class.java)
+    fun start(context: Context, screen: Boolean) {
+      val intent = Intent(context, LiveService::class.java).putExtra(EXTRA_SCREEN, screen)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.startForegroundService(intent)
       } else {

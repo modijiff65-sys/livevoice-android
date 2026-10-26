@@ -30,10 +30,14 @@ The APK is signed with the debug key, so allow "install from unknown sources" on
 
 ## Features
 
+- Two capture sources: **Camera** (front/back, flash, mute) and **Screen** (whole screen, or a
+  single app on Android 14+ through the system picker). Both keep the voice effect.
 - RTMP streaming with front/back camera switch, flash, mute, 480p / 720p / 1080p, portrait or
   landscape, 30 fps, configurable bitrate per quality.
 - Voice presets: Normal, Deep Man, Child, Female, Robot, Alien, Echo, Monster, Radio, Custom
   (pitch -12..+12 semitones and formant 0.7x..1.4x).
+- Clean audio chain: microphone source (not the call audio path), 85 Hz high pass, WSOLA pitch
+  shifter, formant biquad, noise gate, soft limiter. No hard clipping, so no buzz.
 - Effects can be switched while live, without dropping the stream.
 - Optional 5 second test recording played back on the speaker, so you can hear the effect before
   going live.
@@ -50,14 +54,19 @@ app/src/main/java/com/nauz/livevoice/
   audio/VoiceEngine.kt     VoicePreset, VoiceProcessor (pitch shifter, biquad, ring mod, echo)
   audio/ProcessedMicSource Custom RootEncoder AudioSource: AudioRecord -> DSP -> AAC encoder
   audio/VoiceTester.kt     5 second test record + WAV write
-  stream/StreamController  RtmpStream wrapper, state machine, reconnect, camera controls
+  stream/StreamController  RtmpStream (camera) + RtmpDisplay (screen) wrapper, state, reconnect
   stream/LiveService.kt    Foreground service
   ui/                      Stream, Effects, Settings, Onboarding screens + theme + components
 ```
 
-The audio chain is `AudioRecord(VOICE_COMMUNICATION)` -> `AcousticEchoCanceler` +
-`NoiseSuppressor` -> `VoiceProcessor` -> RootEncoder AAC encoder. Nothing is played back on the
-speaker, so there is no feedback loop.
+The audio chain is `AudioRecord(MIC)` -> `AcousticEchoCanceler` + `NoiseSuppressor` ->
+`VoiceProcessor` -> RootEncoder AAC encoder. Nothing is played back on the speaker, so there is no
+feedback loop. In screen mode `RtmpDisplay` builds its own microphone, so the same
+`VoiceProcessor` is plugged in through RootEncoder's `CustomAudioEffect` hook instead.
+
+Screen streaming uses MediaProjection. Android 14+ shows the system picker where the user can share
+the entire screen or one app; older versions share the whole screen. The projection runs inside the
+mediaProjection type foreground service, which is required on Android 14.
 
 ## Build a release APK
 

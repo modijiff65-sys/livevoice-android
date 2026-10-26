@@ -3,7 +3,6 @@ package com.nauz.livevoice.audio
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -28,14 +27,14 @@ data class VoicePreset(
   companion object {
     val ALL: List<VoicePreset> = listOf(
       VoicePreset("normal", "Normal"),
-      VoicePreset("deep_man", "Deep Man", pitch = -4f, formant = 0.88f, drive = 1.1f),
-      VoicePreset("child", "Child", pitch = 5f, formant = 1.28f),
-      VoicePreset("female", "Female", pitch = 3f, formant = 1.15f),
-      VoicePreset("robot", "Robot", ringHz = 80f, ringMix = 0.9f, bandpass = true),
-      VoicePreset("alien", "Alien", pitch = 4f, formant = 1.35f, ringHz = 24f, ringMix = 0.8f, echoMs = 180, echoMix = 0.25f),
-      VoicePreset("echo", "Echo", echoMs = 300, echoMix = 0.45f),
-      VoicePreset("monster", "Monster", pitch = -7f, formant = 0.8f, echoMs = 120, echoMix = 0.2f, drive = 3f),
-      VoicePreset("radio", "Radio", drive = 2.5f, bandpass = true),
+      VoicePreset("deep_man", "Deep Man", pitch = -4f, formant = 0.9f),
+      VoicePreset("child", "Child", pitch = 5f, formant = 1.25f),
+      VoicePreset("female", "Female", pitch = 3f, formant = 1.12f),
+      VoicePreset("robot", "Robot", ringHz = 70f, ringMix = 0.85f, bandpass = true),
+      VoicePreset("alien", "Alien", pitch = 4f, formant = 1.3f, ringHz = 24f, ringMix = 0.7f, echoMs = 180, echoMix = 0.22f),
+      VoicePreset("echo", "Echo", echoMs = 300, echoMix = 0.4f),
+      VoicePreset("monster", "Monster", pitch = -7f, formant = 0.82f, echoMs = 120, echoMix = 0.18f, drive = 2.2f),
+      VoicePreset("radio", "Radio", drive = 1.8f, bandpass = true),
       VoicePreset("custom", "Custom")
     )
 
@@ -48,44 +47,60 @@ data class VoicePreset(
 
 /**
  * Real-time voice changer. Works on interleaved 16-bit PCM in place, block by block, so it can sit
- * between AudioRecord and the RTMP audio encoder.
+ * between the microphone and the AAC encoder.
  *
- * Everything here is allocation free after the first block, which matters because this runs on the
- * audio thread while the phone is also encoding and streaming video.
+ * Chain: high pass -> (radio band) -> formant -> ring mod -> drive -> echo -> noise gate -> limiter.
+ * Pitch shifting (WSOLA) runs on the block before the per-sample stage. Everything is allocation
+ * free after the first block because this runs on the audio thread while video is being encoded.
  */
 class VoiceProcessor {
 
   @Volatile
   var preset: VoicePreset = VoicePreset.byId("normal")
 
+  @Volatile
+  var muted: Boolean = false
+
   /** Called with the RMS level (0..1) of every third block, for the audio meter. */
   var onLevel: ((Float) -> Unit)? = null
 
   private var sampleRate = 44100
   private var channels = 1
-  private var shifter = PitchShifter()
+  private var shifter = WsolaShifter()
   private var echo = EchoLine(44100, 700)
   private var formantFilter = Biquad.peaking(44100.0, 1200.0, 1.2, 0.0)
-  private val bandFilter = Biquad.bandPass(44100.0, 1400.0, 0.9)
+  private var bandFilter = Biquad.bandPass(44100.0, 1500.0, 0.8)
+  private var highPass = Biquad.highPass(44100.0, 85.0, 0.707)
   private var ringPhase = 0.0
   private var mono = FloatArray(0)
   private var processed = FloatArray(0)
+  private var gateEnv = 0f
+  private var gateGain = 1f
   private var levelCounter = 0
+  private var lastRatio = 1.0
 
   fun configure(sampleRate: Int, channels: Int) {
     if (this.sampleRate == sampleRate && this.channels == channels) return
     this.sampleRate = sampleRate
     this.channels = channels
-    shifter = PitchShifter()
+    shifter = WsolaShifter()
     echo = EchoLine(sampleRate, 700)
+    highPass = Biquad.highPass(sampleRate.toDouble(), 85.0, 0.707)
     formantFilter = Biquad.peaking(sampleRate.toDouble(), 1200.0, 1.2, 0.0)
+    bandFilter = Biquad.bandPass(sampleRate.toDouble(), 1500.0, 0.8)
+    lastRatio = 1.0
   }
 
   /** Processes [size] bytes of interleaved 16-bit PCM inside [buffer], in place. */
   fun process(buffer: ByteArray, size: Int) {
-    val p = preset
     val frames = (size / 2) / channels
     if (frames <= 0) return
+    if (muted) {
+      java.util.Arrays.fill(buffer, 0, size, 0)
+      onLevel?.invoke(0f)
+      return
+    }
+    val p = preset
     if (mono.size != frames) {
       mono = FloatArray(frames)
       processed = FloatArray(frames)
@@ -101,9 +116,13 @@ class VoiceProcessor {
       mono[f] = sum / channels
     }
 
-    if (abs(p.pitch) > 0.05f) {
-      shifter.process(mono, processed, 2.0.pow(p.pitch / 12.0))
+    val ratio = 2.0.pow(p.pitch / 12.0)
+    if (abs(ratio - 1.0) > 0.003) {
+      if (abs(ratio - lastRatio) > 0.001) shifter.reset()
+      lastRatio = ratio
+      shifter.process(mono, processed, ratio)
     } else {
+      lastRatio = 1.0
       System.arraycopy(mono, 0, processed, 0, frames)
     }
 
@@ -114,8 +133,12 @@ class VoiceProcessor {
 
     for (i in 0 until frames) {
       var v = processed[i]
+
+      // Removes rumble, handling noise and DC offset: the main "mud" in phone mics.
+      v = highPass.process(v)
       if (p.bandpass) v = bandFilter.process(v)
       v = formantFilter.process(v)
+
       if (p.ringHz > 0f && p.ringMix > 0f) {
         ringPhase += ringStep
         if (ringPhase > 2 * PI) ringPhase -= 2 * PI
@@ -127,7 +150,21 @@ class VoiceProcessor {
         v = tanh((v * d).toDouble()).toFloat() / tanh(d.toDouble()).toFloat()
       }
       if (p.echoMs > 0 && p.echoMix > 0f) v = echo.process(v, echoDelay, p.echoMix)
-      if (v > 1f) v = 1f else if (v < -1f) v = -1f
+
+      // Noise gate / downward expander: quiet room noise is pushed down instead of being amplified.
+      val level = if (v < 0f) -v else v
+      gateEnv = if (level > gateEnv) gateEnv + (level - gateEnv) * 0.35f else gateEnv * 0.995f
+      val target = if (gateEnv < GATE_THRESHOLD) GATE_FLOOR else 1f
+      gateGain += (target - gateGain) * (if (target > gateGain) 0.25f else 0.02f)
+      v *= gateGain
+
+      // Soft limiter instead of hard clipping: hard clipping is what makes a voice sound buzzy.
+      if (v > 0.9f) {
+        v = 0.9f + 0.1f * tanh(((v - 0.9f) / 0.1f).toDouble()).toFloat()
+      } else if (v < -0.9f) {
+        v = -0.9f - 0.1f * tanh(((-v - 0.9f) / 0.1f).toDouble()).toFloat()
+      }
+
       processed[i] = v
       sumSquares += v.toDouble() * v.toDouble()
     }
@@ -159,51 +196,149 @@ class VoiceProcessor {
     buffer[index] = (s and 0xFF).toByte()
     buffer[index + 1] = ((s shr 8) and 0xFF).toByte()
   }
+
+  private companion object {
+    const val GATE_THRESHOLD = 0.006f
+    const val GATE_FLOOR = 0.1f
+  }
 }
 
 /**
- * Two-tap granular pitch shifter. The read head moves at [ratio] speed while a second tap sits half
- * a grain ahead; the two are crossfaded with a raised cosine so the grain jump stays inaudible.
- * Quality is "voice chat" grade on purpose: no latency worth speaking of, no big FFT buffers.
+ * WSOLA pitch shifter: overlap-add grains with a similarity search (cross correlation) so the
+ * grains line up with the waveform instead of cutting it at random, then a resample stage to bring
+ * the length back. That is what keeps the result clean instead of the warble/buzz a fixed two tap
+ * crossfade produces.
  */
-private class PitchShifter {
-  private val size = 16384
-  private val grain = 1024
-  private val half = grain / 2.0
-  private val ring = FloatArray(size)
-  private var write = 0
+private class WsolaShifter {
+
+  private val frame = 1024
+  private val hop = frame / 2
+  private val tolerance = 160
+  private val searchStep = 4
+  private val window = FloatArray(frame) {
+    (0.5 - 0.5 * cos(2.0 * PI * it / (frame - 1))).toFloat()
+  }
+
+  private var input = FloatArray(1 shl 15)
+  private var inputLen = 0
+  private var analysisPos = 0.0
+  private var naturalPos = 0
+
+  private var stretched = FloatArray(1 shl 15)
+  private var written = 0
   private var readPos = 0.0
 
-  fun process(input: FloatArray, output: FloatArray, ratio: Double) {
-    for (i in input.indices) {
-      ring[write] = input[i]
-      write = (write + 1) % size
+  fun reset() {
+    inputLen = 0
+    analysisPos = 0.0
+    naturalPos = 0
+    written = 0
+    readPos = 0.0
+  }
 
-      val v1 = tap(readPos)
-      val v2 = tap(readPos + half)
-      val phase = ((readPos % grain) + grain) % grain / grain.toDouble()
-      val mix = (0.5 - 0.5 * cos(2.0 * PI * phase)).toFloat()
-      output[i] = v1 * (1f - mix) + v2 * mix
+  fun process(source: FloatArray, out: FloatArray, ratio: Double) {
+    val alpha = ratio.coerceIn(0.5, 2.0)
+    appendInput(source)
 
-      readPos += ratio
-      var distance = write - readPos
-      while (distance < grain) {
-        readPos -= grain
-        distance += grain
+    val needed = readPos + out.size * alpha + frame
+    while (written < needed) produceFrame(alpha)
+
+    for (i in out.indices) {
+      val p = readPos
+      val i0 = p.toInt()
+      val frac = (p - i0).toFloat()
+      val s0 = stretched[i0]
+      val s1 = stretched[i0 + 1]
+      out[i] = s0 + (s1 - s0) * frac
+      readPos += alpha
+    }
+    trim()
+  }
+
+  private fun produceFrame(alpha: Double) {
+    val base = analysisPos.toInt().coerceAtLeast(0)
+    ensureInput(base + frame + tolerance + 1)
+    val from = (base + bestOffset(base)).coerceIn(0, (inputLen - frame).coerceAtLeast(0))
+    val end = written + frame
+    if (end > stretched.size) {
+      var size = stretched.size
+      while (size < end) size *= 2
+      stretched = stretched.copyOf(size)
+    }
+    for (k in 0 until frame) stretched[written + k] += window[k] * input[from + k]
+    written += hop
+    naturalPos = from + hop
+    analysisPos += hop / alpha
+  }
+
+  /** Offset (within +/- tolerance) whose waveform best continues the previous grain. */
+  private fun bestOffset(base: Int): Int {
+    if (inputLen < frame + tolerance) return 0
+    val ref = naturalPos.coerceIn(0, inputLen - tolerance - 1)
+    var best = 0
+    var bestScore = -1e18
+    var d = -tolerance
+    while (d <= tolerance) {
+      val start = base + d
+      if (start >= 0 && start + tolerance < inputLen) {
+        var dot = 0.0
+        var energy = 1e-9
+        var k = 0
+        while (k < tolerance) {
+          val a = input[start + k]
+          val b = input[ref + k]
+          dot += (a * b).toDouble()
+          energy += (a * a).toDouble()
+          k += 2
+        }
+        val score = dot / sqrt(energy)
+        if (score > bestScore) {
+          bestScore = score
+          best = d
+        }
       }
-      while (distance > size - 2 * grain) {
-        readPos += grain
-        distance -= grain
-      }
+      d += searchStep
+    }
+    return best
+  }
+
+  private fun appendInput(source: FloatArray) {
+    val needed = inputLen + source.size
+    if (needed > input.size) {
+      var size = input.size
+      while (size < needed) size *= 2
+      input = input.copyOf(size)
+    }
+    System.arraycopy(source, 0, input, inputLen, source.size)
+    inputLen = needed
+  }
+
+  private fun ensureInput(min: Int) {
+    if (min > input.size) {
+      var size = input.size
+      while (size < min) size *= 2
+      input = input.copyOf(size)
+    }
+    if (min > inputLen) {
+      java.util.Arrays.fill(input, inputLen, min, 0f)
+      inputLen = min
     }
   }
 
-  private fun tap(pos: Double): Float {
-    val base = floor(pos).toInt()
-    val frac = (pos - base).toFloat()
-    val i0 = ((base % size) + size) % size
-    val i1 = (i0 + 1) % size
-    return ring[i0] + (ring[i1] - ring[i0]) * frac
+  private fun trim() {
+    val cut = readPos.toInt()
+    if (cut > 1 shl 15 && cut < written) {
+      System.arraycopy(stretched, cut, stretched, 0, written - cut)
+      written -= cut
+      readPos -= cut
+      val inCut = analysisPos.toInt() - 4096
+      if (inCut > 1 shl 13 && inCut < inputLen) {
+        System.arraycopy(input, inCut, input, 0, inputLen - inCut)
+        inputLen -= inCut
+        analysisPos -= inCut
+        naturalPos -= inCut
+      }
+    }
   }
 }
 
@@ -234,6 +369,7 @@ class Biquad private constructor() {
   private var x2 = 0f
   private var y1 = 0f
   private var y2 = 0f
+  private var sr = 44100.0
 
   fun process(x: Float): Float {
     val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
@@ -243,8 +379,6 @@ class Biquad private constructor() {
     y1 = y
     return y
   }
-
-  private var sr = 44100.0
 
   fun setPeaking(freq: Double, q: Double, gainDb: Double) {
     val a = 10.0.pow(gainDb / 40.0)
@@ -260,12 +394,11 @@ class Biquad private constructor() {
   }
 
   companion object {
-    fun peaking(sampleRate: Double, freq: Double, q: Double, gainDb: Double): Biquad {
-      return Biquad().apply {
+    fun peaking(sampleRate: Double, freq: Double, q: Double, gainDb: Double): Biquad =
+      Biquad().apply {
         sr = sampleRate
         setPeaking(freq, q, gainDb)
       }
-    }
 
     fun bandPass(sampleRate: Double, freq: Double, q: Double): Biquad {
       val w0 = 2.0 * PI * freq / sampleRate
@@ -276,6 +409,20 @@ class Biquad private constructor() {
         b0 = (alpha / a0).toFloat()
         b1 = 0f
         b2 = (-alpha / a0).toFloat()
+        a1 = (-2.0 * cw / a0).toFloat()
+        a2 = ((1.0 - alpha) / a0).toFloat()
+      }
+    }
+
+    fun highPass(sampleRate: Double, freq: Double, q: Double): Biquad {
+      val w0 = 2.0 * PI * freq / sampleRate
+      val alpha = sin(w0) / (2.0 * q)
+      val cw = cos(w0)
+      val a0 = 1.0 + alpha
+      return Biquad().apply {
+        b0 = ((1.0 + cw) / 2.0 / a0).toFloat()
+        b1 = (-(1.0 + cw) / a0).toFloat()
+        b2 = ((1.0 + cw) / 2.0 / a0).toFloat()
         a1 = (-2.0 * cw / a0).toFloat()
         a2 = ((1.0 - alpha) / a0).toFloat()
       }

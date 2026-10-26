@@ -26,6 +26,7 @@ data class StreamSettings(
   val rtmpUrl: String = DEFAULT_RTMP_URL,
   val quality: Quality = Quality.HD720,
   val portrait: Boolean = true,
+  val screenMode: Boolean = false,
   val effectId: String = "normal",
   val customPitch: Float = 0f,
   val customFormant: Float = 1f,
@@ -80,6 +81,7 @@ class SettingsRepository(context: Context) {
       rtmpUrl = prefs[KEY_RTMP_URL] ?: StreamSettings.DEFAULT_RTMP_URL,
       quality = Quality.entries.firstOrNull { it.name == prefs[KEY_QUALITY] } ?: Quality.HD720,
       portrait = prefs[KEY_PORTRAIT] ?: true,
+      screenMode = prefs[KEY_SCREEN_MODE] ?: false,
       effectId = prefs[KEY_EFFECT] ?: "normal",
       customPitch = prefs[KEY_CUSTOM_PITCH] ?: 0f,
       customFormant = prefs[KEY_CUSTOM_FORMANT] ?: 1f,
@@ -95,6 +97,9 @@ class SettingsRepository(context: Context) {
   suspend fun setPortrait(portrait: Boolean) =
     appContext.settingsDataStore.edit { it[KEY_PORTRAIT] = portrait }
 
+  suspend fun setScreenMode(enabled: Boolean) =
+    appContext.settingsDataStore.edit { it[KEY_SCREEN_MODE] = enabled }
+
   suspend fun setEffect(id: String) = appContext.settingsDataStore.edit { it[KEY_EFFECT] = id }
 
   suspend fun setCustom(pitch: Float, formant: Float) = appContext.settingsDataStore.edit {
@@ -109,6 +114,7 @@ class SettingsRepository(context: Context) {
     val KEY_RTMP_URL = stringPreferencesKey("rtmp_url")
     val KEY_QUALITY = stringPreferencesKey("quality")
     val KEY_PORTRAIT = booleanPreferencesKey("portrait")
+    val KEY_SCREEN_MODE = booleanPreferencesKey("screen_mode")
     val KEY_EFFECT = stringPreferencesKey("effect")
     val KEY_CUSTOM_PITCH = floatPreferencesKey("custom_pitch")
     val KEY_CUSTOM_FORMANT = floatPreferencesKey("custom_formant")
