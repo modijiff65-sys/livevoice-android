@@ -15,9 +15,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.PlayArrow
@@ -38,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -201,50 +206,20 @@ private fun AppRoot(container: AppContainer) {
     }
 
     if (!isLive) {
-      NavigationBar(
-        modifier = Modifier.align(Alignment.BottomCenter),
-        containerColor = Palette.Surface,
-        tonalElevation = 0.dp
+      Box(
+        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
       ) {
-        NavigationBarItem(
-          selected = tab == 0,
-          onClick = { tab = 0 },
-          icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Stream") },
-          label = { Text("Stream") },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Color.White,
-            selectedTextColor = Color.White,
-            indicatorColor = Palette.Purple,
-            unselectedIconColor = Palette.TextSecondary,
-            unselectedTextColor = Palette.TextSecondary
-          )
-        )
-        NavigationBarItem(
-          selected = tab == 1,
-          onClick = { tab = 1 },
-          icon = { Icon(Icons.Filled.Face, contentDescription = "Voice") },
-          label = { Text("Voice") },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Color.White,
-            selectedTextColor = Color.White,
-            indicatorColor = Palette.Purple,
-            unselectedIconColor = Palette.TextSecondary,
-            unselectedTextColor = Palette.TextSecondary
-          )
-        )
-        NavigationBarItem(
-          selected = tab == 2,
-          onClick = { tab = 2 },
-          icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-          label = { Text("Settings") },
-          colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Color.White,
-            selectedTextColor = Color.White,
-            indicatorColor = Palette.Purple,
-            unselectedIconColor = Palette.TextSecondary,
-            unselectedTextColor = Palette.TextSecondary
-          )
-        )
+        GlassCard(
+          modifier = Modifier.fillMaxWidth(),
+          shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 7.dp)
+        ) {
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly) {
+            BottomTab("⌂", "Home", tab == 0) { tab = 0 }
+            BottomTab("◉", "Studio", tab == 1) { tab = 1 }
+            BottomTab("⚙", "Settings", tab == 2) { tab = 2 }
+          }
+        }
       }
     }
 
@@ -259,6 +234,19 @@ private fun AppRoot(container: AppContainer) {
           Text(text = text, color = Palette.TextPrimary)
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun BottomTab(icon: String, label: String, selected: Boolean, onClick: () -> Unit) {
+  Box(
+    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(15.dp)).background(if (selected) Palette.AccentSoft else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 22.dp, vertical = 8.dp),
+    contentAlignment = Alignment.Center
+  ) {
+    Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+      Text(icon, color = if (selected) Color.White else Palette.TextMuted, fontSize = 15.sp)
+      Text(label, color = if (selected) Color.White else Palette.TextSecondary, fontSize = 10.sp, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium)
     }
   }
 }

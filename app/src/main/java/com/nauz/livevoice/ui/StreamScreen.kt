@@ -61,234 +61,116 @@ fun StreamScreen(
   onOpenChat: () -> Unit,
   onOpenSettings: () -> Unit
 ) {
-  val isLive = state.status == StreamController.Status.LIVE ||
-    state.status == StreamController.Status.RETRYING
+  val isLive = state.status == StreamController.Status.LIVE || state.status == StreamController.Status.RETRYING
+  var previewView by remember { mutableStateOf<OpenGlView?>(null) }
 
-  Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-
+  Box(Modifier.fillMaxSize().background(Palette.Background)) {
     if (screenMode) {
-      Box(
-        modifier = Modifier.fillMaxSize().background(Palette.Background),
-        contentAlignment = Alignment.Center
-      ) {
-        Column(
-          modifier = Modifier.padding(32.dp),
-          horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-          Text(
-            text = "Screen sharing",
-            color = Palette.TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold
-          )
-          Spacer(Modifier.height(10.dp))
-          Text(
-            text = "Tap Go Live and the system will ask what to share: your entire screen, or on Android 14 and newer a single app. Your voice effect still applies to the mic.",
-            color = Palette.TextSecondary,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-          )
-          Spacer(Modifier.height(10.dp))
-          Text(
-            text = "Screen sharing needs Android 5.0 or newer. Everything you show, including notifications, goes to the stream.",
-            color = Palette.TextSecondary.copy(alpha = 0.8f),
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center
-          )
+      Box(Modifier.fillMaxSize().background(Palette.Hero), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(34.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          IconSquare("▣", active = true)
+          Text("Screen broadcast", color = Palette.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+          Text("Share your screen with the same real-time voice processing. Android will ask you to confirm what to share when you go live.", color = Palette.TextSecondary, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
         }
       }
     } else if (permissionsGranted) {
-      var previewView by remember { mutableStateOf<OpenGlView?>(null) }
-      AndroidView(
-        factory = { context -> OpenGlView(context).also { previewView = it } },
-        modifier = Modifier.fillMaxSize()
-      )
-      LaunchedEffect(previewView, settings.quality, settings.portrait, screenMode) {
-        previewView?.let { onPreview(it) }
-      }
+      AndroidView(factory = { context -> OpenGlView(context).also { previewView = it } }, modifier = Modifier.fillMaxSize())
+      LaunchedEffect(previewView, settings.quality, settings.portrait) { previewView?.let { onPreview(it) } }
     } else {
-      Box(
-        modifier = Modifier.fillMaxSize().background(Palette.Background),
-        contentAlignment = Alignment.Center
-      ) {
-        Text(
-          text = "Camera and microphone permission is needed to go live",
-          color = Palette.TextSecondary,
-          textAlign = TextAlign.Center,
-          modifier = Modifier.padding(32.dp)
-        )
+      Box(Modifier.fillMaxSize().background(Palette.Background), contentAlignment = Alignment.Center) {
+        Text("Camera and microphone permission is needed to go live", color = Palette.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.padding(32.dp))
       }
     }
 
-    // Dark gradient so overlay text stays readable on any camera frame.
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .background(
-          Brush.verticalGradient(
-            0f to Color.Black.copy(alpha = 0.55f),
-            0.28f to Color.Transparent,
-            0.62f to Color.Transparent,
-            1f to Color.Black.copy(alpha = 0.85f)
-          )
-        )
-    )
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(.68f), Color.Transparent, Color.Black.copy(.9f)))))
 
-    // Top status row
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 18.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      if (isLive) {
-        LiveBadge(text = if (state.status == StreamController.Status.RETRYING) "RECONNECTING" else "LIVE")
-        Spacer(Modifier.width(10.dp))
-        LiveTimer(startedAt = state.startedAt)
-        Spacer(Modifier.width(10.dp))
-        StatusPill("${state.bitrateKbps} kbps")
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text("Live", color = Palette.TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Voice", color = Palette.Purple, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.weight(1f))
+        if (isLive) {
+          LiveBadge(if (state.status == StreamController.Status.RETRYING) "RECONNECTING" else "LIVE")
+          Spacer(Modifier.width(8.dp))
+          StatusPill("${state.bitrateKbps} kbps")
+        } else {
+          StatusPill(if (screenMode) "SCREEN" else "CAMERA")
+        }
+      }
+
+      if (!isLive) {
+        Spacer(Modifier.weight(1f))
+        HeroHomeCard(onGoLive = onGoLive)
       } else {
-        Text(
-          text = "LiveVoice",
-          color = Palette.TextPrimary,
-          fontSize = 20.sp,
-          fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.width(10.dp))
-        StatusPill("${settings.quality.label} · ${if (settings.portrait) "Portrait" else "Landscape"}")
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+          LiveTimer(state.startedAt)
+        }
+        Spacer(Modifier.weight(1f))
       }
-      Spacer(Modifier.weight(1f))
-      PillButton(text = "Settings", onClick = onOpenSettings)
-    }
 
-    if (isLive) {
-      LevelMeter(
-        level = level,
-        modifier = Modifier
-          .align(Alignment.CenterStart)
-          .padding(start = 16.dp)
-          .width(8.dp)
-          .height(160.dp)
-      )
-    }
-
-    // Bottom controls
-    Column(
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .fillMaxWidth()
-        .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 92.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-      GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)
-      ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          SectionTitle(text = "Source")
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            EffectChip(
-              label = "Camera",
-              selected = !screenMode,
-              onClick = { onToggleScreenMode(false) }
-            )
-            EffectChip(
-              label = "Screen",
-              selected = screenMode,
-              onClick = { onToggleScreenMode(true) }
-            )
-          }
-          SectionTitle(text = "Voice effect")
-          LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(VoicePreset.ALL) { item ->
-              val selected = item.id == preset.id
-              EffectChip(
-                label = item.label,
-                selected = selected,
-                onClick = { onSelectPreset(item) }
-              )
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        GlassCard(Modifier.fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text("Broadcast", color = Palette.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+              Spacer(Modifier.weight(1f))
+              Text(if (screenMode) "Screen" else "Camera", color = Palette.TextSecondary, fontSize = 11.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              EffectChip("Camera", !screenMode, { onToggleScreenMode(false) }, Modifier.weight(1f))
+              EffectChip("Screen", screenMode, { onToggleScreenMode(true) }, Modifier.weight(1f))
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              items(VoicePreset.ALL) { item ->
+                EffectChip(item.label, item.id == preset.id, { onSelectPreset(item) })
+              }
             }
           }
         }
-      }
 
-      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        PillButton(
-          text = if (muted) "Unmute" else "Mute",
-          onClick = onToggleMute,
-          active = muted,
-          accent = Palette.LiveRed
-        )
-        if (!screenMode) {
-          PillButton(text = "Flip", onClick = onSwitchCamera)
-          PillButton(
-            text = if (flashOn) "Light off" else "Light",
-            onClick = onToggleFlash,
-            active = flashOn
-          )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+          PillButton(if (muted) "Unmute" else "Mute", onToggleMute, Modifier.weight(1f), muted, Palette.LiveRed)
+          if (!screenMode) PillButton("Flip", onSwitchCamera, Modifier.weight(1f))
+          if (!screenMode) PillButton(if (flashOn) "Light off" else "Flash", onToggleFlash, Modifier.weight(1f), flashOn, Palette.Blue)
+          if (isLive) PillButton("Chat", onOpenChat, Modifier.weight(1f), true, Palette.Blue)
         }
-        if (isLive) {
-          PillButton(text = "Chat", onClick = onOpenChat)
+
+        GradientButton(if (isLive) "STOP STREAM" else if (screenMode) "SHARE SCREEN & GO LIVE" else "GO LIVE", if (isLive) onStop else onGoLive, Modifier.fillMaxWidth(), state.status != StreamController.Status.CONNECTING && permissionsGranted)
+        if (!isLive) Text("YouTube • Ready to stream", color = Palette.TextMuted, fontSize = 10.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        state.message?.let { Text(it, color = Palette.LiveRed, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+      }
+    }
+
+    if (isLive) LevelMeter(level, Modifier.align(Alignment.CenterStart).padding(start = 7.dp).width(7.dp).height(150.dp))
+  }
+}
+
+@Composable
+private fun HeroHomeCard(onGoLive: () -> Unit) {
+  GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+    Box(Modifier.fillMaxWidth().background(Palette.Hero).padding(18.dp)) {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconSquare("◉", active = true)
+          Spacer(Modifier.width(12.dp))
+          Column {
+            Text("Ready to Go Live?", color = Palette.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Start streaming with your camera or screen.", color = Palette.TextSecondary, fontSize = 11.sp)
+          }
         }
-      }
-
-      if (isLive) {
-        GradientButton(text = "STOP STREAM", onClick = onStop)
-      } else {
-        GradientButton(
-          text = when {
-            state.status == StreamController.Status.CONNECTING -> "CONNECTING..."
-            screenMode -> "SHARE SCREEN & GO LIVE"
-            else -> "GO LIVE"
-          },
-          onClick = onGoLive,
-          enabled = state.status != StreamController.Status.CONNECTING && permissionsGranted
-        )
-      }
-
-      state.message?.let { message ->
-        Text(
-          text = message,
-          color = Palette.LiveRed,
-          fontSize = 13.sp,
-          textAlign = TextAlign.Center,
-          modifier = Modifier.fillMaxWidth()
-        )
+        GradientButton("GO LIVE  →", onGoLive, Modifier.fillMaxWidth())
       }
     }
   }
 }
 
-@Composable
-private fun StatusPill(text: String) {
-  Box(
-    modifier = Modifier
-      .clip(RoundedCornerShape(10.dp))
-      .background(Palette.Surface.copy(alpha = 0.72f))
-      .padding(horizontal = 10.dp, vertical = 6.dp)
-  ) {
-    Text(text = text, color = Palette.TextSecondary, fontSize = 12.sp)
-  }
-}
+@Composable private fun StatusPill(text: String) = Box(Modifier.clip(RoundedCornerShape(9.dp)).background(Palette.Surface.copy(.82f)).padding(horizontal = 9.dp, vertical = 6.dp)) { Text(text, color = Palette.TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
 
-@Composable
-private fun LiveTimer(startedAt: Long) {
+@Composable private fun LiveTimer(startedAt: Long) {
   val elapsed by produceState(0L, startedAt) {
-    if (startedAt <= 0L) {
-      value = 0L
-      return@produceState
-    }
-    while (true) {
-      value = ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(0L)
-      delay(1000L)
-    }
+    if (startedAt <= 0) return@produceState
+    while (true) { value = ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(0); delay(1000) }
   }
-  val minutes = elapsed / 60
-  val seconds = elapsed % 60
-  Text(
-    text = "%02d:%02d".format(minutes, seconds),
-    color = Palette.TextPrimary,
-    fontSize = 13.sp,
-    fontWeight = FontWeight.SemiBold
-  )
+  Text("%02d:%02d".format(elapsed / 60, elapsed % 60), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
 }

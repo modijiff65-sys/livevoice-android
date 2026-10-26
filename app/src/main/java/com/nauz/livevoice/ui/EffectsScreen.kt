@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,181 +56,76 @@ fun EffectsScreen(
   var player by remember { mutableStateOf<MediaPlayer?>(null) }
 
   DisposableEffect(Unit) {
-    onDispose {
-      tester.cancel()
-      player?.let { runCatching { it.release() } }
-    }
+    onDispose { tester.cancel(); player?.let { runCatching { it.release() } } }
   }
 
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Palette.Background)
-      .verticalScroll(rememberScrollState())
-      .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp)
-  ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-      Text(
-        text = "Voice Effects",
-        color = Palette.TextPrimary,
-        fontSize = 24.sp,
-        fontWeight = FontWeight.Bold
-      )
-      Text(
-        text = "Tap a preset to hear it on stream instantly. The audience hears the effect, your phone speaker stays silent.",
-        color = Palette.TextSecondary,
-        fontSize = 13.sp
-      )
-    }
-
-    VoicePreset.ALL.chunked(2).forEach { row ->
-      Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        row.forEach { item ->
-          PresetTile(
-            preset = item,
-            selected = item.id == preset.id,
-            modifier = Modifier.weight(1f),
-            onClick = { onSelect(item) }
-          )
-        }
-        if (row.size == 1) Spacer(Modifier.weight(1f))
+  Column(Modifier.fillMaxSize().background(Palette.Background).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 92.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+      Column(Modifier.weight(1f)) {
+        Text("Voice", color = Palette.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Studio", color = Palette.Purple, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
       }
+      MiniStat("ACTIVE", preset.label, Modifier)
     }
 
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle(text = "Custom tuning")
-        Text(
-          text = "Pitch ${"%.1f".format(preset.pitch)} semitones",
-          color = Palette.TextPrimary,
-          fontSize = 14.sp
-        )
-        Slider(
-          value = preset.pitch,
-          onValueChange = { onCustomChange(it, preset.formant) },
-          valueRange = -12f..12f
-        )
-        Text(
-          text = "Formant ${"%.2f".format(preset.formant)}x",
-          color = Palette.TextPrimary,
-          fontSize = 14.sp
-        )
-        Slider(
-          value = preset.formant,
-          onValueChange = { onCustomChange(preset.pitch, it) },
-          valueRange = 0.7f..1.4f
-        )
-        Text(
-          text = "Formant makes the voice sound bigger (below 1.0) or smaller (above 1.0) without touching pitch.",
-          color = Palette.TextSecondary,
-          fontSize = 12.sp
-        )
-      }
-    }
-
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle(text = "Test before going live")
-        Text(
-          text = "Records 5 seconds with the selected effect and plays it back on the speaker. Nothing is streamed.",
-          color = Palette.TextSecondary,
-          fontSize = 12.sp
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-          PillButton(
-            text = when {
-              testing -> "Recording..."
-              playing -> "Playing..."
-              else -> "Record 5s test"
-            },
-            onClick = {
-              if (testing || playing) return@PillButton
-              testing = true
-              tester.start(context, preset, 5) { result ->
-                handler.post {
-                  testing = false
-                  result.onSuccess { file ->
-                    val created = playFile(context, file) {
-                      handler.post {
-                        playing = false
-                        player = null
-                      }
-                    }
-                    if (created == null) {
-                      playing = false
-                      onMessage("Could not play the test recording")
-                    } else {
-                      playing = true
-                      player = created
-                    }
-                  }.onFailure { error ->
-                    onMessage(error.message ?: "Test recording failed")
-                  }
-                }
-              }
-            },
-            active = testing || playing,
-            modifier = Modifier.weight(1f)
-          )
-          if (testing) {
-            PillButton(text = "Cancel", onClick = {
-              tester.cancel()
-              testing = false
-            })
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text("Voice Presets", color = Palette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+          Spacer(Modifier.weight(1f)); Text("${VoicePreset.ALL.size} effects", color = Palette.TextMuted, fontSize = 10.sp)
+        }
+        VoicePreset.ALL.chunked(3).forEach { row ->
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            row.forEach { item -> PresetTile(item, item.id == preset.id, Modifier.weight(1f)) { onSelect(item) } }
+            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
           }
         }
       }
     }
 
-    Text(
-      text = "Tip: presets marked with echo and radio work best with headphones for the audience. The app never plays your changed voice back into the mic, so there is no feedback loop.",
-      color = Palette.TextSecondary,
-      fontSize = 12.sp
-    )
+    GlassCard(Modifier.fillMaxWidth()) {
+      Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { Text("Fine Tune", color = Palette.TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text("LIVE", color = Palette.Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+        Text("Pitch  ${"%.1f".format(preset.pitch)}", color = Palette.TextSecondary, fontSize = 11.sp)
+        Slider(value = preset.pitch, onValueChange = { onCustomChange(it, preset.formant) }, valueRange = -12f..12f)
+        Text("Formant  ${"%.2f".format(preset.formant)}x", color = Palette.TextSecondary, fontSize = 11.sp)
+        Slider(value = preset.formant, onValueChange = { onCustomChange(preset.pitch, it) }, valueRange = .7f..1.4f)
+        Text("Adjust pitch and character without changing the stream controls.", color = Palette.TextMuted, fontSize = 10.sp)
+      }
+    }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Text("Voice Preview", color = Palette.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+          Text("Record a short local test. It is not streamed.", color = Palette.TextMuted, fontSize = 10.sp)
+        }
+        PillButton(when { testing -> "Recording"; playing -> "Playing"; else -> "Test 5s" }, {
+          if (testing || playing) return@PillButton
+          testing = true
+          tester.start(context, preset, 5) { result ->
+            handler.post {
+              testing = false
+              result.onSuccess { file ->
+                val created = playFile(context, file) { handler.post { playing = false; player = null } }
+                if (created == null) { playing = false; onMessage("Could not play the test recording") } else { playing = true; player = created }
+              }.onFailure { onMessage(it.message ?: "Test recording failed") }
+            }
+          }
+        }, active = testing || playing)
+      }
+    }
   }
 }
 
 @Composable
-private fun PresetTile(
-  preset: VoicePreset,
-  selected: Boolean,
-  modifier: Modifier = Modifier,
-  onClick: () -> Unit
-) {
-  val shape = RoundedCornerShape(18.dp)
-  Box(
-    modifier = modifier
-      .height(84.dp)
-      .clip(shape)
-      .background(if (selected) Palette.SurfaceHigh else Palette.Surface)
-      .clickable(onClick = onClick)
-  ) {
-    if (selected) {
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .background(Palette.Purple.copy(alpha = 0.22f))
-      )
-    }
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(14.dp),
-      verticalArrangement = Arrangement.Center
-    ) {
-      Text(
-        text = preset.label,
-        color = if (selected) Color.White else Palette.TextPrimary,
-        fontSize = 15.sp,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
-      )
-      Spacer(Modifier.height(4.dp))
-      Text(
-        text = describe(preset),
-        color = Palette.TextSecondary,
-        fontSize = 11.sp
-      )
+private fun PresetTile(preset: VoicePreset, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+  val shape = RoundedCornerShape(15.dp)
+  Box(modifier.height(82.dp).clip(shape).background(if (selected) Palette.AccentSoft else Palette.SurfaceHigh).border(1.dp, if (selected) Palette.Purple else Palette.Stroke, shape).clickable(onClick = onClick)) {
+    Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center) {
+      Text(if (preset.id == "custom") "✦" else "◉", color = if (selected) Palette.Cyan else Palette.Purple, fontSize = 16.sp)
+      Text(preset.label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+      Text(describe(preset), color = Palette.TextMuted, fontSize = 8.sp, maxLines = 1)
     }
   }
 }
