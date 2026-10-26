@@ -18,7 +18,7 @@ import kotlin.math.max
  * so there is no echo.
  */
 @SuppressLint("MissingPermission")
-class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource(), GetMicrophoneData {
+class ProcessedMicSource(private val processor: VoiceProcessor) : AudioSource() {
 
   private var record: AudioRecord? = null
   private var aec: AcousticEchoCanceler? = null

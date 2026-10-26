@@ -209,7 +209,7 @@ private fun PresetTile(
       Box(
         modifier = Modifier
           .fillMaxSize()
-          .background(Palette.Accent.copy(alpha = 0.22f))
+          .background(Palette.Purple.copy(alpha = 0.22f))
       )
     }
     Column(

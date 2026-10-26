@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -128,7 +129,7 @@ fun EffectChip(
     modifier = modifier
       .height(40.dp)
       .clip(shape)
-      .background(if (selected) Palette.Accent else Palette.SurfaceHigh)
+      .background(if (selected) Palette.Accent else SolidColor(Palette.SurfaceHigh))
       .border(1.dp, if (selected) Color.Transparent else Palette.Stroke, shape)
       .clickable(onClick = onClick)
       .padding(horizontal = 16.dp),
