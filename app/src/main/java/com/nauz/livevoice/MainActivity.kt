@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -241,7 +242,7 @@ private fun AppRoot(container: AppContainer) {
 @Composable
 private fun BottomTab(icon: String, label: String, selected: Boolean, onClick: () -> Unit) {
   Box(
-    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(15.dp)).background(if (selected) Palette.AccentSoft else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 22.dp, vertical = 8.dp),
+    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(15.dp)).background(if (selected) Palette.AccentSoft else SolidColor(Color.Transparent)).clickable(onClick = onClick).padding(horizontal = 22.dp, vertical = 8.dp),
     contentAlignment = Alignment.Center
   ) {
     Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

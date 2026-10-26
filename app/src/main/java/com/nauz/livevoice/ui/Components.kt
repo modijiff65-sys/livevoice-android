@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,7 @@ fun GlassCard(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(2
 fun GradientButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
   val transition = rememberInfiniteTransition(label = "cta")
   val pulse by transition.animateFloat(1f, if (enabled) 1.015f else 1f, infiniteRepeatable(tween(1300), RepeatMode.Reverse), label = "scale")
-  Box(modifier = modifier.scale(pulse).height(54.dp).clip(RoundedCornerShape(17.dp)).background(if (enabled) Palette.Accent else Palette.SurfaceHigh).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
+  Box(modifier = modifier.scale(pulse).height(54.dp).clip(RoundedCornerShape(17.dp)).background(if (enabled) Palette.Accent else SolidColor(Palette.SurfaceHigh)).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
     Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp)
   }
 }
@@ -64,7 +65,7 @@ fun PillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 @Composable
 fun EffectChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val shape = RoundedCornerShape(13.dp)
-  Box(modifier = modifier.height(42.dp).clip(shape).background(if (selected) Palette.AccentSoft else Palette.SurfaceHigh).border(1.dp, if (selected) Palette.Purple else Palette.Stroke, shape).clickable(onClick = onClick).padding(horizontal = 15.dp), contentAlignment = Alignment.Center) {
+  Box(modifier = modifier.height(42.dp).clip(shape).background(if (selected) Palette.AccentSoft else SolidColor(Palette.SurfaceHigh)).border(1.dp, if (selected) Palette.Purple else Palette.Stroke, shape).clickable(onClick = onClick).padding(horizontal = 15.dp), contentAlignment = Alignment.Center) {
     Text(label, color = if (selected) Color.White else Palette.TextSecondary, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
   }
 }
@@ -105,7 +106,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun IconSquare(text: String, modifier: Modifier = Modifier, active: Boolean = false) {
-  Box(modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(if (active) Palette.AccentSoft else Palette.SurfaceHigh).border(1.dp, if (active) Palette.Purple else Palette.Stroke, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+  Box(modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(if (active) Palette.AccentSoft else SolidColor(Palette.SurfaceHigh)).border(1.dp, if (active) Palette.Purple else Palette.Stroke, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
     Text(text, fontSize = 19.sp, color = Color.White)
   }
 }

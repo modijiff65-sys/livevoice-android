@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -121,7 +122,7 @@ fun EffectsScreen(
 @Composable
 private fun PresetTile(preset: VoicePreset, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
   val shape = RoundedCornerShape(15.dp)
-  Box(modifier.height(82.dp).clip(shape).background(if (selected) Palette.AccentSoft else Palette.SurfaceHigh).border(1.dp, if (selected) Palette.Purple else Palette.Stroke, shape).clickable(onClick = onClick)) {
+  Box(modifier.height(82.dp).clip(shape).background(if (selected) Palette.AccentSoft else SolidColor(Palette.SurfaceHigh)).border(1.dp, if (selected) Palette.Purple else Palette.Stroke, shape).clickable(onClick = onClick)) {
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.Center) {
       Text(if (preset.id == "custom") "✦" else "◉", color = if (selected) Palette.Cyan else Palette.Purple, fontSize = 16.sp)
       Text(preset.label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
